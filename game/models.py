@@ -57,15 +57,22 @@ class GameSession(models.Model):
     player = models.ForeignKey(User, on_delete=models.CASCADE)
     hero = models.ForeignKey(Hero, on_delete=models.CASCADE)
     demon_lord = models.ForeignKey(DemonLord, on_delete=models.CASCADE)
-    current_turn = models.IntegerField(default=1)
+    current_turn = models.IntegerField(default=0)  # 0으로 변경
+    max_turns = models.IntegerField(default=10)  # 새로운 필드 추가
     is_completed = models.BooleanField(default=False)
     winner = models.CharField(max_length=10, choices=[('HERO', 'Hero'), ('DEMON', 'Demon Lord')], null=True, blank=True)
     created_at = models.DateTimeField(auto_now_add=True)
     updated_at = models.DateTimeField(auto_now=True)
-
+    max_turns = models.IntegerField(default=10)
     def __str__(self):
         return f"Game {self.id}: {self.player.username} vs {self.demon_lord.name}"
 
+    def increment_turn(self):
+        self.current_turn += 1
+        self.save()
+
+    def is_game_over(self):
+        return self.current_turn >= self.max_turns or self.is_completed
 
 class GameAction(models.Model):
     ACTION_TYPES = (

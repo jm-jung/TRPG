@@ -36,20 +36,24 @@
         </div>
     </div>
 
-    <div class="action-buttons">
+   <div class="action-buttons">
         <form method="post" action="{% url 'play_game' game.id %}">
             {% csrf_token %}
             <button type="submit" name="action" value="attack" class="action-button">Attack</button>
-            {% for ability_info in hero_abilities %}
-                <button type="submit" name="action" value="special" class="action-button"
+        </form>
+        {% for ability_info in hero_abilities %}
+            <form method="post" action="{% url 'play_game' game.id %}">
+                {% csrf_token %}
+                <input type="hidden" name="action" value="special">
+                <input type="hidden" name="ability_id" value="{{ ability_info.ability.id }}">
+                <button type="submit" class="action-button"
                         {% if not ability_info.can_use %}disabled{% endif %}>
                     {{ ability_info.ability.name }}
                     (Mana: {{ ability_info.ability.mana_cost }},
                     Cooldown: {% if ability_info.cooldown_remaining > 0 %}{{ ability_info.cooldown_remaining }}{% else %}Ready{% endif %})
                 </button>
-                <input type="hidden" name="ability_id" value="{{ ability_info.ability.id }}">
-            {% endfor %}
-        </form>
+            </form>
+        {% endfor %}
     </div>
 
     <h3>Battle Log:</h3>

@@ -61,7 +61,7 @@ def play_game(request, game_id):
         perform_turn(game_session, action, ability_id)
 
         if game_session.is_completed:
-            return JsonResponse({'redirect': reverse('game_result', args=[game_id])})
+            return redirect(reverse('game_result', args=[game_id]))
 
     hero_abilities = []
     for char_ability in hero.abilities.all():
@@ -89,61 +89,6 @@ def play_game(request, game_id):
         return JsonResponse({'html': html})
     else:
         return render(request, 'game/play.html', context)
-@transaction.atomic
-def perform_turn(game_session, hero_action, ability_id=None):
-    hero = game_session.hero
-    demon_lord = game_session.demon_lord
-
-    game_session.current_turn += 1
-
-    if hero_action == 'attack':
-        damage = max(0, hero.attack - demon_lord.defense)
-        if random.random() < hero.accuracy:
-            if random.random() >= demon_lord.evasion:
-                demon_lord.health = max(0, demon_lord.health - damage)
-                result = 'HIT'
-            else:
-                result = 'EVADE'
-                damage = 0
-        else:
-            result = 'MISS'
-            damage = 0
-
-        GameAction.objects.create(
-            game_session=game_session,
-            turn=game_session.current_turn,
-            actor='HERO',
-            action_type='ATTACK',
-            action_result=result,
-            damage_dealt=damage,
-            description=f"Hero attacks for {damage} damage. Result: {result}"
-        )
-    elif hero_action == 'special':
-        ability = SpecialAbility.objects.get(id=ability_id)
-        result = use_special_ability(hero, ability, demon_lord, game_session)
-
-    if game_session.current_turn > 10 or hero.health <= 0 or demon_lord.health <= 0:
-        end_game(game_session)
-        return
-
-    # Demon Lord's turn
-    if demon_lord.health > 0:
-        if random.random() < 0.3:
-            abilities = SpecialAbility.objects.filter(characterability__demon_lord=demon_lord)
-            if abilities.exists():
-                ability = random.choice(abilities)
-                result = use_special_ability(demon_lord, ability, hero, game_session)
-        else:
-            # Demon Lord's attack logic (similar to hero's attack)
-            pass
-
-    if game_session.current_turn > 10 or hero.health <= 0 or demon_lord.health <= 0:
-        end_game(game_session)
-        return
-
-    hero.save()
-    demon_lord.save()
-    game_session.save()
 
 def use_special_ability(character, ability, target, game_session):
     if character.mana >= ability.mana_cost:
