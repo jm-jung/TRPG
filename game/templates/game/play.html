@@ -1,0 +1,64 @@
+{% extends 'game/base.html' %}
+{% load static %}
+
+{% block js %}
+<script>
+    window.heroHealth = {{ hero.health }};
+    window.heroMaxHealth = {{ hero.max_health }};
+    window.demonLordHealth = {{ demon_lord.health }};
+    window.demonLordMaxHealth = {{ demon_lord.max_health }};
+</script>
+<script src="{% static 'js/game.js' %}" defer></script>
+{% endblock %}
+
+{% block content %}
+<div class="game-container">
+    <h1>Turn {{ turn }}</h1>
+
+    <div class="character-info">
+        <div class="character-card">
+            <h2>Hero</h2>
+            <div id="hero-health-bar" class="health-bar"></div>
+            <p>HP: {{ hero.health }}/{{ hero.max_health }}</p>
+            <p>MP: {{ hero.mana }}/{{ hero.max_mana }}</p>
+            {% if hero.is_cursed %}
+                <p class="cursed">Cursed! ({{ hero.curse_duration }} turns remaining)</p>
+            {% endif %}
+        </div>
+
+        <div class="character-card">
+            <h2>Demon Lord</h2>
+            <div id="demon-lord-health-bar" class="health-bar"></div>
+            <p>HP: {{ demon_lord.health }}/{{ demon_lord.max_health }}</p>
+            {% if demon_lord.is_cursed %}
+                <p class="cursed">Cursed! ({{ demon_lord.curse_duration }} turns remaining)</p>
+            {% endif %}
+        </div>
+    </div>
+
+    <div class="action-buttons">
+        <form method="post" action="{% url 'play_game' game.id %}">
+            {% csrf_token %}
+            <button type="submit" name="action" value="attack" class="action-button">Attack</button>
+            {% for ability_info in hero_abilities %}
+                <button type="submit" name="action" value="special" class="action-button"
+                        {% if not ability_info.can_use %}disabled{% endif %}>
+                    {{ ability_info.ability.name }}
+                    (Mana: {{ ability_info.ability.mana_cost }},
+                    Cooldown: {% if ability_info.cooldown_remaining > 0 %}{{ ability_info.cooldown_remaining }}{% else %}Ready{% endif %})
+                </button>
+                <input type="hidden" name="ability_id" value="{{ ability_info.ability.id }}">
+            {% endfor %}
+        </form>
+    </div>
+
+    <h3>Battle Log:</h3>
+    <div class="battle-log">
+        <ul>
+        {% for action in actions %}
+            <li>Turn {{ action.turn }}: {{ action.description }}</li>
+        {% endfor %}
+        </ul>
+    </div>
+</div>
+{% endblock %}

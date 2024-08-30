@@ -1,0 +1,20 @@
+{% extends 'game/base.html' %}
+
+{% block content %}
+    <h1>게임 결과</h1>
+    <h2>승자: {{ game.winner }}</h2>
+    <h3>영웅 HP: {{ hero.health }}</h3>
+    <h3>마왕 HP: {{ demon_lord.health }}</h3>
+    
+    <h2>배틀 로그:</h2>
+    <ul>
+    {% for action in actions %}
+        <li>턴 {{ action.turn }}: {{ action.actor }} {{ action.action_type }} - {{ action.action_result }} {% if action.damage_dealt %}
+            (Damage: {{ action.damage_dealt }})
+        {% endif %}
+        </li>
+    {% endfor %}
+    </ul>
+    
+    <a href="{% url 'start_game' %}">재시작</a>
+{% endblock %}

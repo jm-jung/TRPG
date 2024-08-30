@@ -1,0 +1,16 @@
+{% extends 'game/base.html' %}
+
+{% block content %}
+    <h1>용사의 도전</h1>
+    {% if user.is_authenticated %}
+        <p>안녕하세요, {{ user.username }}님!</p>
+        <a href="{% url 'start_game' %}">새 게임을 시작합니다.</a>
+        <br>
+        <a href="{% url 'logout' %}">로그아웃</a>
+    {% else %}
+            <p>로그인 후 이용해주세요.</p>
+        <a href="{% url 'login' %}">로그인</a>
+        <br>
+        <a href="{% url 'register' %}">등록</a>
+    {% endif %}
+{% endblock %}
