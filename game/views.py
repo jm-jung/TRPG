@@ -2,13 +2,16 @@ from django.shortcuts import render, redirect
 from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
-from .models import Hero, DemonLord, GameSession, GameAction, SpecialAbility, CharacterAbility
-import random
-from django.urls import reverse
+
+from .chatbot import generate_demon_lord_response, analyze_player_message
+from .models import  Player, GameSession, Dialogue, GameState,StoryProgress
+from django.utils import timezone
 from django.contrib.auth import logout
-from django.db import transaction
 from django.http import JsonResponse
-from django.template.loader import render_to_string
+import json
+import openai
+from django.conf import settings
+
 def home(request):
     return render(request, 'game/home.html')
 
@@ -28,239 +31,127 @@ def logout_view(request):
     logout(request)
     return redirect('home')
 
-@login_required
+
 def start_game(request):
-    hero = Hero.objects.create(name="Hero", player=request.user)
-    demon_lord = DemonLord.objects.create(name="Demon Lord")
+    player, created = Player.objects.get_or_create(user=request.user)
+    game_session = GameSession.objects.create(player=player)
+    StoryProgress.objects.create(game_session=game_session)
+    GameState.objects.create(game_session=game_session)
+    return redirect('play_game', game_session_id=game_session.id)
 
-    # Add abilities
-    fireball = SpecialAbility.objects.get_or_create(name="Fireball", mana_cost=30, cooldown=3)[0]
-    curse = SpecialAbility.objects.get_or_create(name="Curse", mana_cost=40, cooldown=5)[0]
-    heal = SpecialAbility.objects.get_or_create(name="Heal", mana_cost=25, cooldown=2)[0]
-
-    CharacterAbility.objects.create(hero=hero, ability=fireball)
-    CharacterAbility.objects.create(hero=hero, ability=heal)
-    CharacterAbility.objects.create(demon_lord=demon_lord, ability=curse)
-
-    game_session = GameSession.objects.create(
-        player=request.user,
-        hero=hero,
-        demon_lord=demon_lord
-    )
-    return redirect('play_game', game_id=game_session.id)
 
 @login_required
-def play_game(request, game_id):
-    game_session = GameSession.objects.get(id=game_id)
-    hero = game_session.hero
-    demon_lord = game_session.demon_lord
-
+def play_game(request, game_session_id):
+    game_session = GameSession.objects.get(id=game_session_id)
     if request.method == 'POST':
-        action = request.POST.get('action')
-        ability_id = request.POST.get('ability_id')
-        perform_turn(game_session, action, ability_id)
-
-        if game_session.is_completed:
-            return redirect(reverse('game_result', args=[game_id]))
-
-    hero_abilities = []
-    for char_ability in hero.abilities.all():
-        cooldown_remaining = max(0, char_ability.ability.cooldown - (game_session.current_turn - char_ability.last_used_turn))
-        can_use = cooldown_remaining == 0 and hero.mana >= char_ability.ability.mana_cost
-        hero_abilities.append({
-            'ability': char_ability.ability,
-            'can_use': can_use,
-            'cooldown_remaining': cooldown_remaining
-        })
-
-    actions = GameAction.objects.filter(game_session=game_session).order_by('-turn')[:5]
-
+        return process_dialogue(request, game_session)
     context = {
-        'game': game_session,
-        'hero': hero,
-        'demon_lord': demon_lord,
-        'turn': game_session.current_turn,
-        'hero_abilities': hero_abilities,
-        'actions': actions,
+        'game_session': game_session,
+        'dialogues': game_session.dialogues.order_by('timestamp'),
+        'story_progress': game_session.storyprogress,
+        'game_state': game_session.gamestate,
     }
-
-    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
-        html = render_to_string('game/play.html', context, request=request)
-        return JsonResponse({'html': html})
-    else:
-        return render(request, 'game/play.html', context)
-
-def use_special_ability(character, ability, target, game_session):
-    if character.mana >= ability.mana_cost:
-        character.mana -= ability.mana_cost
-
-        if ability.name == "Fireball":
-            damage = 30 + character.attack // 2
-            target.health = max(0, target.health - damage)
-            result = f"{character.name}의 파이어볼! {target.name}에게 {damage}의 데미지!"
-        elif ability.name == "Heal":
-            heal = 40 + character.defense
-            character.health = min(character.health + heal, character.max_health)
-            result = f"{character.name}의 힐! {heal}만큼 체력 회복!"
-        elif ability.name == "Curse":
-            target.is_cursed = True
-            target.curse_duration = 3
-            target.accuracy *= 0.7
-            target.evasion *= 0.7
-            result = f"{character.name}의 저주! {target.name}의 명중률과 회피율이 30% 감소!"
-
-        GameAction.objects.create(
-            game_session=game_session,
-            turn=game_session.current_turn,
-            actor=character.__class__.__name__.upper(),
-            action_type=ability.name.upper(),
-            action_result='SUCCESS',
-            description=result
-        )
-
-        if isinstance(character, Hero):
-            ability_link = CharacterAbility.objects.get(hero=character, ability=ability)
-        else:
-            ability_link = CharacterAbility.objects.get(demon_lord=character, ability=ability)
-        ability_link.last_used_turn = game_session.current_turn
-        ability_link.save()
-
-        character.save()
-        if target != character:
-            target.save()
-
-        return result
-    else:
-        return f"{character.name}의 마나가 부족하여 {ability.name}을(를) 사용할 수 없습니다."
-
-def end_game(game_session):
-    game_session.is_completed = True
-    if game_session.hero.health > game_session.demon_lord.health:
-        game_session.winner = 'HERO'
-    else:
-        game_session.winner = 'DEMON'
-    game_session.save()
+    return render(request, 'game/play.html', context)
 
 
-@transaction.atomic
-def perform_turn(game_session, hero_action, ability_id=None):
-    print(f"Starting turn: {game_session.current_turn + 1}")
-    hero = game_session.hero
-    demon_lord = game_session.demon_lord
+def process_dialogue(request, game_session):
+    player_message = request.POST.get('message')
 
-    game_session.current_turn += 1
+    # 플레이어 대화 저장
+    Dialogue.objects.create(
+        game_session=game_session,
+        speaker='영웅',
+        content=player_message
+    )
 
-    # Hero's turn
-    if hero_action == 'attack':
-        damage = max(0, hero.attack - demon_lord.defense)
-        if random.random() < hero.accuracy:
-            if random.random() >= demon_lord.evasion:
-                demon_lord.health = max(0, demon_lord.health - damage)
-                result = '공격했다!'
-            else:
-                result = '피했다!'
-                damage = 0
-        else:
-            result = '빗나갔다!'
-            damage = 0
+    # AI를 사용하여 마왕의 응답 생성
+    demon_lord_response = generate_demon_lord_response(player_message)
 
-        GameAction.objects.create(
-            game_session=game_session,
-            turn=game_session.current_turn,
-            actor='HERO',
-            action_type='ATTACK',
-            action_result=result,
-            damage_dealt=damage,
-            description=f"영웅은 {result}/ 결과: {damage}만큼의 피해"
-        )
-        print(f"Hero action: Attack, Damage: {damage}, Result: {result}")
-    elif hero_action == 'special':
-        ability = SpecialAbility.objects.get(id=ability_id)
-        result = use_special_ability(hero, ability, demon_lord, game_session)
-        print(f"Hero action: Special Ability, Result: {result}")
+    # 마왕 대화 저장
+    Dialogue.objects.create(
+        game_session=game_session,
+        speaker='마왕',
+        content=demon_lord_response
+    )
 
-    # Check game end condition after hero's turn
-    if check_game_end(game_session, hero, demon_lord):
-        return
+    # 게임 상태 업데이트
+    update_game_state(game_session, player_message, demon_lord_response)
 
-    # Demon Lord's turn
-    if demon_lord.health > 0:
-        if random.random() < 0.3:  # 30% chance to use special ability
-            abilities = SpecialAbility.objects.filter(characterability__demon_lord=demon_lord)
-            if abilities.exists():
-                ability = random.choice(abilities)
-                result = use_special_ability(demon_lord, ability, hero, game_session)
-                print(f"Demon Lord action: Special Ability, Result: {result}")
-        else:
-            damage = max(0, demon_lord.attack - hero.defense)
-            if random.random() < demon_lord.accuracy:
-                if random.random() >= hero.evasion:
-                    hero.health = max(0, hero.health - damage)
-                    result = '공격했다!'
-                else:
-                    result = '피했다!'
-                    damage = 0
-            else:
-                result = '빗나갔다!'
-                damage = 0
+    # 스토리 진행 업데이트
+    update_story_progress(game_session)
 
-            GameAction.objects.create(
-                game_session=game_session,
-                turn=game_session.current_turn,
-                actor='DEMON',
-                action_type='ATTACK',
-                action_result=result,
-                damage_dealt=damage,
-                description=f"마왕은 {result}/ 결과: {damage}만큼의 피해!"
-            )
-            print(f"Demon Lord action: Attack, Damage: {damage}, Result: {result}")
-
-    # Check game end condition after demon lord's turn
-    if check_game_end(game_session, hero, demon_lord):
-        return
-
-    # Handle curse effects
-    handle_curse_effects(game_session, hero, demon_lord)
-
-    hero.save()
-    demon_lord.save()
-    game_session.save()
-
-    print(f"Turn {game_session.current_turn} completed")
-    print(f"Hero HP: {hero.health}, Demon Lord HP: {demon_lord.health}")
-
-def check_game_end(game_session, hero, demon_lord):
-    if game_session.current_turn > 10 or hero.health <= 0 or demon_lord.health <= 0:
+    # 게임 종료 조건 확인
+    if check_game_end(game_session):
         end_game(game_session)
-        return True
+
+    return JsonResponse({
+        'demon_lord_response': demon_lord_response,
+        'game_state': game_session.gamestate.__dict__,
+        'story_progress': game_session.storyprogress.__dict__,
+    })
+
+
+def update_game_state(game_session, player_message, story_progress, calculate_resistance_decrease=None):
+    game_state = game_session.gamestate
+
+    # 플레이어 메시지 분석
+    player_analysis = analyze_player_message(player_message)
+
+    # 악마 군주의 응답 생성
+    demon_lord_response = generate_demon_lord_response(player_message, game_state, story_progress)
+
+    # 플레이어의 설득력 업데이트
+    persuasion_increase = player_analysis['persuasion_strength']
+    game_state.player_persuasion_level = min(100, game_state.player_persuasion_level + persuasion_increase)
+
+    # 악마 군주의 저항력 업데이트
+    resistance_decrease = calculate_resistance_decrease(player_analysis, game_state)
+    game_state.demon_lord_resistance = max(0, game_state.demon_lord_resistance - resistance_decrease)
+
+    # 감정 상태 업데이트
+    game_state.player_emotional_state = update_emotional_state(game_state.player_emotional_state, player_analysis['emotional_impact'])
+    game_state.demon_lord_emotional_state = update_demon_lord_emotion(game_state, resistance_decrease)
+
+    # 주장 강도 계산
+    game_state.argument_strength = calculate_argument_strength(
+        game_state.player_persuasion_level,
+        game_state.demon_lord_resistance,
+        player_analysis['primary_approach']
+    )
+
+    # 환경 요인 업데이트 (예시)
+    update_environmental_factors(game_state.environmental_factors, player_message)
+
+    # 게임 종료 조건 확인
+    if game_state.player_persuasion_level >= 100 or game_state.demon_lord_resistance <= 0:
+        game_session.is_completed = True
+        game_session.save()
+
+    game_state.save()
+    return game_state, demon_lord_response
+
+def update_story_progress(game_session):
+    story_progress = game_session.storyprogress
+    # 여기에 스토리 진행 업데이트 로직을 구현합니다.
+    story_progress.save()
+
+
+def check_game_end(game_session):
+    # 게임 종료 조건을 확인하는 로직을 구현합니다.
     return False
 
-def handle_curse_effects(game_session, hero, demon_lord):
-    for character in [hero, demon_lord]:
-        if character.is_cursed:
-            character.curse_duration -= 1
-            if character.curse_duration <= 0:
-                character.is_cursed = False
-                character.accuracy /= 0.7
-                character.evasion /= 0.7
-                GameAction.objects.create(
-                    game_session=game_session,
-                    turn=game_session.current_turn,
-                    actor='SYSTEM',
-                    action_type='CURSE',
-                    action_result='END',
-                    description=f"{character.name}의 저주가 풀렸습니다!"
-                )
-                print(f"Curse ended for {character.name}")
 
+def end_game(game_session):
+    game_session.is_active = False
+    game_session.end_time = timezone.now()
+    game_session.save()
 
 @login_required
-def game_result(request, game_id):
-    game_session = GameSession.objects.get(id=game_id)
+def game_result(request, game_session_id):
+    game_session = GameSession.objects.get(id=game_session_id)
     context = {
-        'game': game_session,
-        'hero': game_session.hero,
-        'demon_lord': game_session.demon_lord,
-        'actions': GameAction.objects.filter(game_session=game_session).order_by('turn')
+        'game_session': game_session,
+        'dialogues': game_session.dialogues.order_by('timestamp'),
+        'final_state': game_session.gamestate,
     }
     return render(request, 'game/result.html', context)

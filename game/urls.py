@@ -10,8 +10,8 @@ urlpatterns = [
     path('login/', auth_views.LoginView.as_view(template_name='game/login.html'), name='login'),
     path('logout/', views.logout_view, name='logout'),
     path('start/', views.start_game, name='start_game'),
-    path('play/<int:game_id>/', views.play_game, name='play_game'),
-    path('result/<int:game_id>/', views.game_result, name='game_result'),
+    path('play/<int:game_session_id>/', views.play_game, name='play_game'),
+    path('result/<int:game_session_id>/', views.game_result, name='game_result'),
 ]
 
 if settings.DEBUG:

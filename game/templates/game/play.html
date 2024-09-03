@@ -1,68 +1,56 @@
 {% extends 'game/base.html' %}
 {% load static %}
 
-{% block js %}
-<script>
-    window.heroHealth = {{ hero.health }};
-    window.heroMaxHealth = {{ hero.max_health }};
-    window.demonLordHealth = {{ demon_lord.health }};
-    window.demonLordMaxHealth = {{ demon_lord.max_health }};
-</script>
-<script src="{% static 'js/game.js' %}" defer></script>
-{% endblock %}
-
 {% block content %}
-<div class="game-container">
-    <h1>Turn {{ turn }}</h1>
-
-    <div class="character-info">
-        <div class="character-card">
-            <h2>Hero</h2>
-            <div id="hero-health-bar" class="health-bar"></div>
-            <p>HP: {{ hero.health }}/{{ hero.max_health }}</p>
-            <p>MP: {{ hero.mana }}/{{ hero.max_mana }}</p>
-            {% if hero.is_cursed %}
-                <p class="cursed">Cursed! ({{ hero.curse_duration }} turns remaining)</p>
-            {% endif %}
+<div id="game-container">
+    <div id="game-status">
+        <h2>Game Status</h2>
+        <p>Chapter: <span id="current-chapter">{{ story_progress.current_chapter }}</span></p>
+        <div id="player-status">
+            <h3>Player</h3>
+            <p>Persuasion Level: <span id="player-persuasion">{{ game_state.player_persuasion_level }}</span></p>
+            <p>Emotional State: <span id="player-emotion">{{ game_state.player_emotional_state }}</span></p>
         </div>
-
-        <div class="character-card">
-            <h2>Demon Lord</h2>
-            <div id="demon-lord-health-bar" class="health-bar"></div>
-            <p>HP: {{ demon_lord.health }}/{{ demon_lord.max_health }}</p>
-            {% if demon_lord.is_cursed %}
-                <p class="cursed">Cursed! ({{ demon_lord.curse_duration }} turns remaining)</p>
-            {% endif %}
+        <div id="demon-lord-status">
+            <h3>Demon Lord</h3>
+            <p>Resistance: <span id="demon-resistance">{{ game_state.demon_lord_resistance }}</span></p>
+            <p>Emotional State: <span id="demon-emotion">{{ game_state.demon_lord_emotional_state }}</span></p>
         </div>
+        <p>Argument Strength: <span id="argument-strength">{{ game_state.argument_strength }}</span></p>
     </div>
 
-   <div class="action-buttons">
-        <form method="post" action="{% url 'play_game' game.id %}">
+    <div id="dialogue-history">
+        {% for dialogue in dialogues %}
+            <div class="message {% if dialogue.speaker == 'player' %}player-message{% else %}demon-lord-message{% endif %}">
+                <strong>{{ dialogue.speaker|title }}:</strong> {{ dialogue.content }}
+            </div>
+        {% endfor %}
+    </div>
+
+    <div id="player-controls">
+        <form id="dialogue-form" method="post">
             {% csrf_token %}
-            <button type="submit" name="action" value="attack" class="action-button">Attack</button>
+            <textarea name="message" id="message-input" rows="3" placeholder="메시지를 입력하세요..."></textarea>
+            <div id="persuasion-tools">
+                <button type="button" class="persuasion-tool" data-tool="logic">논리 사용</button>
+                <button type="button" class="persuasion-tool" data-tool="emotion">감정에 호소</button>
+                <button type="button" class="persuasion-tool" data-tool="flattery">아첨</button>
+                <button type="button" class="persuasion-tool" data-tool="threat">은근한 위협</button>
+            </div>
+            <button type="submit" id="send-message">보내기</button>
         </form>
-        {% for ability_info in hero_abilities %}
-            <form method="post" action="{% url 'play_game' game.id %}">
-                {% csrf_token %}
-                <input type="hidden" name="action" value="special">
-                <input type="hidden" name="ability_id" value="{{ ability_info.ability.id }}">
-                <button type="submit" class="action-button"
-                        {% if not ability_info.can_use %}disabled{% endif %}>
-                    {{ ability_info.ability.name }}
-                    (Mana: {{ ability_info.ability.mana_cost }},
-                    Cooldown: {% if ability_info.cooldown_remaining > 0 %}{{ ability_info.cooldown_remaining }}{% else %}Ready{% endif %})
-                </button>
-            </form>
-        {% endfor %}
     </div>
 
-    <h3>Battle Log:</h3>
-    <div class="battle-log">
+    <div id="game-tips">
+        <h3>설득 팁</h3>
         <ul>
-        {% for action in actions %}
-            <li>Turn {{ action.turn }}: {{ action.description }}</li>
-        {% endfor %}
+            <li>악마 군주의 이성에 호소하려면 논리를 사용하세요</li>
+            <li>감정적 호소는 악마 군주의 감정을 움직일 수 있습니다</li>
+            <li>아첨은 악마 군주의 경계심을 낮출 수 있습니다</li>
+            <li>은근한 위협은 당신의 주장을 강화할 수 있지만, 조심하세요!</li>
         </ul>
     </div>
 </div>
+
+<script src="{% static 'js/game.js' %}"></script>
 {% endblock %}
