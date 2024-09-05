@@ -1,20 +1,35 @@
 from django.db import models
 from django.contrib.auth.models import User
+from django.utils import timezone
+
 
 class Player(models.Model):
     user = models.OneToOneField(User, on_delete=models.CASCADE)
     name = models.CharField(max_length=100)
 
+    def __str__(self):
+        return self.user.username
+
 class GameSession(models.Model):
     player = models.ForeignKey(Player, on_delete=models.CASCADE)
     is_active = models.BooleanField(default=True)
-    start_time = models.DateTimeField(auto_now_add=True)
+    is_completed = models.BooleanField(default=False)
+    start_time = models.DateTimeField(default=timezone.now)
     end_time = models.DateTimeField(null=True, blank=True)
-    outcome = models.CharField(max_length=20, choices=[
+    outcome = models.CharField(default='ongoing',max_length=20, choices=[
         ('ongoing', 'Ongoing'),
         ('victory', 'Victory'),
         ('defeat', 'Defeat')
+    ])
+    result = models.CharField( max_length=20, choices=[
+        ('ongoing', 'Ongoing'),
+        ('good_ending', 'Good Ending'),
+        ('perfect_ending', 'Perfect Ending'),
+        ('bad_ending', 'Bad Ending')
     ], default='ongoing')
+
+    def __str__(self):
+        return f"Game Session for {self.player.username}"
 
 class Dialogue(models.Model):
     game_session = models.ForeignKey(GameSession, on_delete=models.CASCADE, related_name='dialogues')
@@ -25,7 +40,10 @@ class Dialogue(models.Model):
 class StoryProgress(models.Model):
     game_session = models.OneToOneField(GameSession, on_delete=models.CASCADE)
     current_chapter = models.IntegerField(default=1)
-    plot_points = models.JSONField(default=dict)  # To store key story elements and player choices
+    progress = models.IntegerField(default=0)  # 'chapter_progress'를 'progress'로 변경
+
+    def __str__(self):
+        return f"Story Progress for Game Session {self.game_session.id}"
 
 class GameState(models.Model):
     game_session = models.OneToOneField(GameSession, on_delete=models.CASCADE)

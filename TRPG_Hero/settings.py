@@ -40,7 +40,7 @@ INSTALLED_APPS = [
     'django.contrib.sessions',
     'django.contrib.messages',
     'django.contrib.staticfiles',
-    'game',
+    'game.apps.GameConfig',
 ]
 
 MIDDLEWARE = [
@@ -76,11 +76,15 @@ WSGI_APPLICATION = 'TRPG_Hero.wsgi.application'
 
 # Database
 # https://docs.djangoproject.com/en/5.1/ref/settings/#databases
-
 DATABASES = {
     'default': {
         'ENGINE': 'django.db.backends.sqlite3',
         'NAME': BASE_DIR / 'db.sqlite3',
+        'OPTIONS': {
+            'timeout': 30,  # 타임아웃을 30초로 늘립니다.
+            'isolation_level': None,  # 자동 트랜잭션 관리를 비활성화합니다.
+        },
+        'ATOMIC_REQUESTS': True,  # 각 요청을 트랜잭션으로 처리합니다.
     }
 }
 
@@ -103,9 +107,9 @@ AUTH_PASSWORD_VALIDATORS = [
     },
 ]
 
-LOGIN_REDIRECT_URL = 'home'
+LOGIN_REDIRECT_URL = 'game:home'
 LOGIN_URL = 'login'
-LOGOUT_REDIRECT_URL = 'home'
+LOGOUT_REDIRECT_URL = 'game:home'
 
 # Internationalization
 # https://docs.djangoproject.com/en/5.1/topics/i18n/

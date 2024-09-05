@@ -4,6 +4,8 @@ from django.urls import path
 from . import views
 from django.contrib.auth import views as auth_views
 
+app_name = 'game'  # URL 네임스페이스 추가
+
 urlpatterns = [
     path('', views.home, name='home'),
     path('register/', views.register, name='register'),
@@ -12,6 +14,11 @@ urlpatterns = [
     path('start/', views.start_game, name='start_game'),
     path('play/<int:game_session_id>/', views.play_game, name='play_game'),
     path('result/<int:game_session_id>/', views.game_result, name='game_result'),
+
+    # 새로운 API 엔드포인트 추가
+    path('api/process-dialogue/<int:game_session_id>/', views.process_dialogue, name='process_dialogue'),
+
+    # 게임 히스토리 페이지 (선택적)
 ]
 
 if settings.DEBUG:
