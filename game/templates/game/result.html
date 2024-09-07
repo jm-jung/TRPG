@@ -1,0 +1,26 @@
+{% extends 'game/base.html' %}
+
+{% block content %}
+<h1>게임 결과</h1>
+<h2>{{ game_result.result }}</h2>
+
+<div class="game-stats">
+    <p>최종 설득력: {{ game_result.final_persuasion_level }}</p>
+    <p>최종 마왕 저항력: {{ game_result.final_demon_resistance }}</p>
+    <p>최종 챕터: {{ game_result.final_chapter }}</p>
+    <p>총 턴 수: {{ game_result.total_turns }}</p>
+    <p>게임 진행 시간: {{ game_result.duration.total_seconds|floatformat:0 }}초</p>
+</div>
+
+<h3>대화 기록</h3>
+<div class="dialogue-history">
+    {% for dialogue in dialogues %}
+        <div class="message {% if dialogue.speaker == '영웅' %}player-message{% else %}demon-lord-message{% endif %}">
+            <strong>{{ dialogue.speaker }}:</strong> {{ dialogue.content }}
+        </div>
+    {% empty %}
+        <p>대화 기록이 없습니다.</p>
+    {% endfor %}
+</div>
+
+{% endblock %}
