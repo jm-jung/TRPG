@@ -1,0 +1,46 @@
+{% load static %}
+{% block content %}
+<div class="game-container">
+    <header>
+        <h1>텍스트 RPG: 마왕과의 대화</h1>
+        <link rel="stylesheet" href="{% static 'css/style.css' %}">
+    </header>
+
+    <div class="game-state-panel">
+        <h2>게임 상태</h2>
+        <div class="state-info">
+            <div>
+                <p>현재 턴: <span id="current-turn">{{ game_state.current_chapter }}</span></p>
+                <p>플레이어 설득력: <span id="player-persuasion">{{ game_state.player_persuasion_level }}</span></p>
+                <p>플레이어 감정: <span id="player-emotion">{{ game_state.player_emotional_state }}</span></p>
+            </div>
+            <div>
+                <p>마왕 저항력: <span id="demon-resistance">{{ game_state.demon_lord_resistance }}</span></p>
+                <p>마왕 감정: <span id="demon-emotion">{{ game_state.demon_lord_emotional_state }}</span></p>
+                <p>논증 강도: <span id="argument-strength">{{ game_state.argument_strength }}</span></p>
+            </div>
+        </div>
+    </div>
+
+    <div class="dialogue-history">
+        <h2>대화 기록</h2>
+        <div id="dialogue-content"></div>
+    </div>
+
+    <div class="player-input">
+        <input type="text" id="player-message" placeholder="메시지를 입력하세요...">
+        <button id="send-message">전송</button>
+    </div>
+
+    <div class="game-progress">
+        <div class="progress-bar">
+            <div id="progress-fill"></div>
+        </div>
+        <p>게임 진행도: <span id="progress-text">0%</span></p>
+    </div>
+</div>
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/game_sheet.js' %}"></script>
+{% endblock %}

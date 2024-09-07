@@ -1,0 +1,61 @@
+{% extends 'game/base.html' %}
+{% load static %}
+
+{% block content %}
+<div id="game-container" xmlns="http://www.w3.org/1999/html">
+    <div id="game-status">
+        <h2>게임 상태</h2>
+        <p>현재 턴: <span id="current-chapter">{{ story_progress.current_chapter }}</span></p>
+
+    <div id="player-status">
+        <h3>플레이어</h3>
+        <p>설득력: <span id="player-persuasion">{{ game_state.player_persuasion_level }}</span></p>
+    </div>
+
+    <div id="demon-lord-status">
+        <h3>마왕</h3>
+        <p>저항력: <span id="demon-resistance">{{ game_state.demon_lord_resistance }}</span></p>
+        <p>감정 상태: <span id="demon-emotion">{{ game_state.demon_lord_emotional_state }}</span></p>
+    </div>
+
+    </div>
+
+    <div id="dialogue-history">
+        <h3>대화 기록</h3>
+            <div id="messages-container">
+                {% for dialogue in dialogues %}
+                <div class="message {% if dialogue.speaker == '영웅' %}player-message{% else %}demon-lord-message{% endif %}">
+                    <strong>{{ dialogue.speaker }}: </strong> {{ dialogue.content }}
+                </div>
+                {% endfor %}
+            </div>
+    </div>
+
+    <div id="player-controls">
+        <form id="dialogue-form">
+            {% csrf_token %}
+            <textarea id="player-message" name="message" rows="3" placeholder="마왕에게 말하기" required></textarea>
+            <button type="submit">전송</button>
+        </form>
+    </div>
+
+    <div id="game-tips">
+        <h3>대화 팁</h3>
+        <ul>
+            <li>마왕과의 대화에서 다양한 접근 방식을 시도해보세요.</li>
+            <li>논리적 주장, 감정적 호소, 칭찬, 또는 은근한 압박 등 다양한 전략을 사용할 수 있습니다.</li>
+            <li>마왕의 반응을 주의 깊게 관찰하고 그에 맞춰 대화 전략을 조정하세요.</li>
+            <li>게임 상태 지표를 참고하여 당신의 설득이 얼마나 효과적인지 확인하세요.</li>
+        </ul>
+    </div>
+</div>
+
+{% endblock %}
+
+{% block extra_js %}
+<script src="{% static 'js/game.js' %}"></script>
+<script>
+    // 게임 세션 ID를 JavaScript 변수로 전달
+    const gameSessionId = {{ game_session.id }};
+</script>
+{% endblock %}
