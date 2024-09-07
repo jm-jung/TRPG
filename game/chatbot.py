@@ -1,111 +1,141 @@
-from transformers import AutoModelForCausalLM, AutoTokenizer, pipeline
-import torch
+from openai import OpenAI
 from django.conf import settings
-import os
 import logging
+import random
 
-# 로깅 설정
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
-# 모델과 토크나이저를 전역 변수로 선언
-model = None
-tokenizer = None
-sentiment_analyzer = None
+client = OpenAI()
 
-def load_model():
-    global model, tokenizer, sentiment_analyzer
-    if model is None or tokenizer is None:
-        model_name = "skt/kogpt2-base-v2"  # 한국어 모델로 변경
-        sentiment_model_name = "snunlp/KR-FinBert-SC"  # 한국어 감정 분석 모델
-        try:
-            model = AutoModelForCausalLM.from_pretrained(model_name).eval()
-            model.to('cuda' if torch.cuda.is_available() else 'cpu')
-            tokenizer = AutoTokenizer.from_pretrained(model_name)
-            sentiment_analyzer = pipeline("sentiment-analysis", model=sentiment_model_name, tokenizer=sentiment_model_name)
-            logger.info(f"모델 {model_name}와 {sentiment_model_name}이 성공적으로 로드되었습니다.")
-        except Exception as e:
-            logger.error(f"모델 로딩 중 오류 발생: {e}")
-            raise
-
-@torch.no_grad()
 def generate_demon_lord_response(player_message, game_state, story_progress):
-    global model, tokenizer
+    resistance = game_state.demon_lord_resistance
 
-    load_model()
+    # 저항력에 따른 마왕의 태도 결정
+    if resistance > 80:
+        attitude = "매우 적대적이고 거만한"
+    elif resistance > 60:
+        attitude = "적대적이지만 약간의 의심이 있는"
+    elif resistance > 40:
+        attitude = "경계하지만 듣는 자세를 가진"
+    elif resistance > 20:
+        attitude = "약간 동요하고 관심을 보이는"
+    else:
+        attitude = "설득되기 시작하고 타협을 고려하는"
 
-    context = f"""
-    당신은 텍스트 기반 RPG의 마왕입니다. 플레이어는 설득과 조종을 통해 당신을 물리치려 하고 있습니다.
-    현재 게임 상태:
-    - 당신의 저항력: {game_state.demon_lord_resistance}/100
-    - 당신의 감정 상태: {game_state.demon_lord_emotional_state}
-    - 플레이어의 설득력: {game_state.player_persuasion_level}/100
-    - 플레이어의 감정 상태: {game_state.player_emotional_state}
-    - 현재 논점의 강도: {game_state.argument_strength}
-    - 스토리 진행: 챕터 {story_progress.current_chapter}
+    prompt = f"""
+    You are the Demon Lord in a text-based RPG. Respond to the player's message directly and in character.
+    Your current attitude is {attitude}. Adjust your response accordingly.
+    Your goal is still world domination, but as your resistance decreases, show more willingness to listen and consider compromise.
+    Respond in Korean and keep your response diverse and contextual.
 
-    마왕으로서 현재 상태와 플레이어의 접근 방식을 고려하여 응답하세요.
-    교활하고, 자부심 강하며, 조종에 저항적이어야 하지만, 강력한 논리나 감정적 호소에 미묘하게 영향을 받는 모습도 보이세요.
-    당신의 응답은 감정 상태와 저항 수준을 반영해야 합니다.
+    Current game state:
+    - Your resistance: {resistance}/100
+    - Your emotional state: {game_state.demon_lord_emotional_state}
+    - Player's persuasion level: {game_state.player_persuasion_level}/100
+    - Current chapter: {story_progress}
 
-    플레이어: {player_message}
-    마왕:
+    Previous messages:
+    {game_state.previous_messages[-5:] if hasattr(game_state, 'previous_messages') else []}
+
+    Player: {player_message}
+    Demon Lord:
+    """
+    print(prompt)
+
+    try:
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system",
+                 "content": "You are a powerful Demon Lord in a text-based RPG. Your attitude changes based on your current resistance level. Respond in Korean."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=3000,
+            n=1,
+            stop=None,
+            temperature=0.8,
+        )
+
+        demon_lord_response = response.choices[0].message.content.strip()
+        logger.info(f"Generated response: {demon_lord_response}")
+
+        if len(demon_lord_response) < 10:
+            raise ValueError("Generated response is too short")
+
+    except Exception as e:
+        logger.error(f"Error generating response: {e}")
+        fallback_responses = [
+            "네 말따위는 신경 쓰지 않겠다. 세상의 종말은 피할 수 없어.",
+            "어리석은 인간이여, 네가 나를 막을 수 있다고 생각하나?",
+            "네 노력이 무색하군. 곧 모든 것이 끝날 것이다.",
+            "흥미롭군. 하지만 네 말은 결국 허공에 떠다니는 먼지에 불과해.",
+            "네가 뭐라고 지껄이든, 나의 계획은 이미 시작되었다."
+        ]
+        demon_lord_response = random.choice(fallback_responses)
+
+    # 감정 분석 (간단한 버전)
+    if resistance > 60:
+        sentiment = "negative"
+    elif resistance > 30:
+        sentiment = "neutral"
+    else:
+        sentiment = "positive" if "동의" in demon_lord_response or "이해" in demon_lord_response else "neutral"
+
+    # 이전 메시지 저장 (최대 10개)
+    if not hasattr(game_state, 'previous_messages'):
+        game_state.previous_messages = []
+    game_state.previous_messages.append(f"Player: {player_message}")
+    game_state.previous_messages.append(f"Demon Lord: {demon_lord_response}")
+    game_state.previous_messages = game_state.previous_messages[-10:]
+
+    return demon_lord_response, {"length": len(demon_lord_response), "sentiment": sentiment}
+def analyze_player_message(message):
+    prompt = f"""
+    다음 메시지의 감정과 설득력을 분석하세요:
+    "{message}"
+
+    분석 결과를 다음 형식으로 제공하세요:
+    - 감정 상태: [매우 긍정적/긍정적/중립적/부정적/매우 부정적]
+    - 설득력: [0-10 사이의 숫자]
+    - 주요 접근 방식: [설득/위협]
     """
 
-    input_ids = tokenizer.encode(context, return_tensors="pt").to(model.device)
-
     try:
-        output = model.generate(
-            input_ids,
-            max_length=len(input_ids[0]) + 100,  # 한국어는 더 긴 텍스트가 필요할 수 있으므로 길이 증가
-            num_return_sequences=1,
-            no_repeat_ngram_size=2,
-            temperature=0.7,
-            top_k=50,
-            top_p=0.95,
+        response = client.chat.completions.create(
+            model="gpt-3.5-turbo",
+            messages=[
+                {"role": "system",
+                 "content": "You are an AI assistant that analyzes the emotion and persuasiveness of messages."},
+                {"role": "user", "content": prompt}
+            ],
+            max_tokens=100,
+            n=1,
+            stop=None,
+            temperature=0.5,
         )
-        response = tokenizer.decode(output[0], skip_special_tokens=True)
-        return response.split("마왕:")[-1].strip()
-    except Exception as e:
-        logger.error(f"AI 응답 생성 중 오류 발생: {e}")
-        return "마왕이 침묵을 지키며 당신을 의심스럽게 바라봅니다."
 
-def analyze_player_message(message):
-    load_model()
+        # 응답 처리
+        generated_text = response.choices[0].message.content
 
-    try:
-        sentiment = sentiment_analyzer(message)[0]
+        analysis = response.choices[0].message['content'].strip()
 
-        # 감정 분석 결과를 바탕으로 emotional_impact 결정
-        if sentiment['label'] == 'positive' and sentiment['score'] > 0.7:
-            emotional_impact = "매우 긍정적"
-        elif sentiment['label'] == 'positive':
-            emotional_impact = "긍정적"
-        elif sentiment['label'] == 'negative' and sentiment['score'] > 0.7:
-            emotional_impact = "매우 부정적"
-        elif sentiment['label'] == 'negative':
-            emotional_impact = "부정적"
-        else:
-            emotional_impact = "중립적"
+        # 분석 결과 파싱
+        emotional_impact = "중립적"
+        persuasion_strength = 0
+        primary_approach = "알 수 없음"
 
-        # 키워드 기반 분석 (한국어로 변경)
-        persuasion_keywords = ['부탁드립니다', '고려해주세요', '이해해주세요', '생각해보세요']
-        threat_keywords = ['조심하세요', '위험합니다', '위협', '결과']
-
-        persuasion_strength = sum(keyword in message for keyword in persuasion_keywords)
-        threat_level = sum(keyword in message for keyword in threat_keywords)
-
-        if persuasion_strength > threat_level:
-            approach = '설득'
-            strength = min(persuasion_strength, 10)
-        else:
-            approach = '위협'
-            strength = min(threat_level, 10)
+        for line in analysis.split('\n'):
+            if '감정 상태:' in line:
+                emotional_impact = line.split(':')[1].strip()
+            elif '설득력:' in line:
+                persuasion_strength = int(line.split(':')[1].strip())
+            elif '주요 접근 방식:' in line:
+                primary_approach = line.split(':')[1].strip()
 
         return {
-            "persuasion_strength": strength,
+            "persuasion_strength": persuasion_strength,
             "emotional_impact": emotional_impact,
-            "primary_approach": approach
+            "primary_approach": primary_approach
         }
     except Exception as e:
         logger.error(f"플레이어 메시지 분석 중 오류 발생: {e}")

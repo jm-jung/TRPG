@@ -2,36 +2,33 @@
 {% load static %}
 
 {% block content %}
-<div id="game-container">
+<div id="game-container" xmlns="http://www.w3.org/1999/html">
     <div id="game-status">
         <h2>게임 상태</h2>
-        <p>현재 챕터: <span id="current-chapter">{{ StoryProgress.current_chapter }}</span></p>
-        <p>현재 턴: <span id="current-turn">{{ current_turn }}</span> / 10</p>
+        <p>현재 턴: <span id="current-chapter">{{ story_progress.current_chapter }}</span></p>
 
-        <div id="player-status">
-            <h3>플레이어</h3>
-            <p>설득력: <span id="player-persuasion">{{ GameState.player_persuasion_level }}</span></p>
-            <p>감정 상태: <span id="player-emotion">{{ game_state.player_emotional_state }}</span></p>
-        </div>
+    <div id="player-status">
+        <h3>플레이어</h3>
+        <p>설득력: <span id="player-persuasion">{{ game_state.player_persuasion_level }}</span></p>
+    </div>
 
-        <div id="demon-lord-status">
-            <h3>마왕</h3>
-            <p>저항력: <span id="demon-resistance">{{ game_state.demon_lord_resistance }}</span></p>
-            <p>감정 상태: <span id="demon-emotion">{{ game_state.demon_lord_emotional_state }}</span></p>
-        </div>
+    <div id="demon-lord-status">
+        <h3>마왕</h3>
+        <p>저항력: <span id="demon-resistance">{{ game_state.demon_lord_resistance }}</span></p>
+        <p>감정 상태: <span id="demon-emotion">{{ game_state.demon_lord_emotional_state }}</span></p>
+    </div>
 
-        <p>논증 강도: <span id="argument-strength">{{ game_state.argument_strength }}</span></p>
     </div>
 
     <div id="dialogue-history">
         <h3>대화 기록</h3>
-        <div id="messages-container">
-            {% for dialogue in dialogues %}
-            <div class="message {% if dialogue.speaker == 'player' %}player-message{% else %}demon-lord-message{% endif %}">
-                <strong>턴 {{ forloop.counter }}: {{ dialogue.speaker|title }}:</strong> {{ dialogue.content }}
+            <div id="messages-container">
+                {% for dialogue in dialogues %}
+                <div class="message {% if dialogue.speaker == '영웅' %}player-message{% else %}demon-lord-message{% endif %}">
+                    <strong>{{ dialogue.speaker }}: </strong> {{ dialogue.content }}
+                </div>
+                {% endfor %}
             </div>
-            {% endfor %}
-        </div>
     </div>
 
     <div id="player-controls">

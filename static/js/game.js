@@ -59,8 +59,11 @@ document.addEventListener('DOMContentLoaded', function() {
         });
     }
 
-    function sendMessage(message) {
-        fetch(`/game/api/process-dialogue/${gameSessionId}/`, {
+        function sendMessage(message) {
+    // URL 구성 방식 변경
+        const url = new URL(`/api/process-dialogue/${gameSessionId}/`, window.location.origin);
+
+        fetch(url, {
             method: 'POST',
             headers: {
                 'Content-Type': 'application/x-www-form-urlencoded',
@@ -80,39 +83,52 @@ document.addEventListener('DOMContentLoaded', function() {
             console.log('Server response:', data);
             updateDialogueHistory(message, data.demon_lord_response);
             updateGameState(data.game_state);
-            checkGameEnd(data.is_game_ended, data.game_result);
+            handleGameEnd(data.game_end);  // 여기를 변경
         })
         .catch(error => {
             console.error('Detailed error:', error);
             alert('메시지 전송 중 오류가 발생했습니다. 자세한 내용은 콘솔을 확인해주세요.');
         });
     }
+
     function updateDialogueHistory(playerMessage, demonLordResponse) {
+        const sanitizeMessage = (msg) => {
+            if (typeof msg !== 'string') {
+                console.warn('Expected string for message, got:', typeof msg);
+                return String(msg); // 문자열로 변환 시도
+            }
+            return msg.replace(/&/g, '&amp;')
+                      .replace(/</g, '&lt;')
+                      .replace(/>/g, '&gt;')
+                      .replace(/"/g, '&quot;')
+                      .replace(/'/g, '&#039;');
+        };
         messagesContainer.innerHTML += `
-            <div class="message player-message"><strong>플레이어:</strong> ${playerMessage}</div>
-            <div class="message demon-lord-message"><strong>마왕:</strong> ${demonLordResponse}</div>
+            <div class="message player-message"><strong>영웅:</strong>${sanitizeMessage(playerMessage)}</div>
+            <div class="message demon-lord-message"><strong>마왕:</strong> ${sanitizeMessage(demonLordResponse)}</div>
         `;
         dialogueHistory.scrollTop = dialogueHistory.scrollHeight;
     }
 
     function updateGameState(gameState) {
-        if (!gameState) {
-            console.error('Invalid game state data received');
-            return;
-        }
-        document.getElementById('current-chapter').textContent = gameState.current_chapter || 'N/A';
-        document.getElementById('current-turn').textContent = gameState.current_turn || 'N/A';
-        document.getElementById('player-persuasion').textContent = gameState.player_persuasion_level || 'N/A';
-        document.getElementById('player-emotion').textContent = gameState.player_emotional_state || 'N/A';
-        document.getElementById('demon-resistance').textContent = gameState.demon_lord_resistance || 'N/A';
-        document.getElementById('demon-emotion').textContent = gameState.demon_lord_emotional_state || 'N/A';
-        document.getElementById('argument-strength').textContent = gameState.argument_strength || 'N/A';
+    if (!gameState) {
+        console.error('Invalid game state data received');
+        return;
     }
 
-    function checkGameEnd(isGameEnded, gameResult) {
-        if (isGameEnded) {
-            alert(`게임 종료! 결과: ${gameResult}`);
-            window.location.href = `result/${gameSessionId}/`;
+    document.getElementById('current-chapter').textContent = gameState.current_chapter || 'N/A';
+    document.getElementById('player-persuasion').textContent = gameState.player_persuasion_level || 'N/A';
+    // document.getElementById('player-emotion').textContent = gameState.player_emotional_state || 'N/A';
+    document.getElementById('demon-resistance').textContent = gameState.demon_lord_resistance || 'N/A';
+    document.getElementById('demon-emotion').textContent = gameState.demon_lord_emotional_state || 'N/A';
+    // document.getElementById('argument-strength').textContent = gameState.argument_strength || 'N/A';
+}
+
+    function handleGameEnd(gameEnd) {
+        if (gameEnd) {
+            alert(`게임이 종료되었습니다. 결과: ${gameEnd.result}\n${gameEnd.message}`);
+            // 게임 종료 후 결과 페이지로 리다이렉트
+            window.location.href = `/result/${gameSessionId}/`;
         }
     }
 

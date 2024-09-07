@@ -1,20 +1,26 @@
 {% extends 'game/base.html' %}
 
 {% block content %}
-    <h1>게임 결과</h1>
-    <h2>승자: {{ game.winner }}</h2>
-    <h3>영웅 HP: {{ hero.health }}</h3>
-    <h3>마왕 HP: {{ demon_lord.health }}</h3>
-    
-    <h2>배틀 로그:</h2>
-    <ul>
-    {% for action in actions %}
-        <li>턴 {{ action.turn }}: {{ action.actor }} {{ action.action_type }} - {{ action.action_result }} {% if action.damage_dealt %}
-            (Damage: {{ action.damage_dealt }})
-        {% endif %}
-        </li>
+<h1>게임 결과</h1>
+<h2>{{ game_result.result }}</h2>
+
+<div class="game-stats">
+    <p>최종 설득력: {{ game_result.final_persuasion_level }}</p>
+    <p>최종 마왕 저항력: {{ game_result.final_demon_resistance }}</p>
+    <p>최종 챕터: {{ game_result.final_chapter }}</p>
+    <p>총 턴 수: {{ game_result.total_turns }}</p>
+    <p>게임 진행 시간: {{ game_result.duration.total_seconds|floatformat:0 }}초</p>
+</div>
+
+<h3>대화 기록</h3>
+<div class="dialogue-history">
+    {% for dialogue in dialogues %}
+        <div class="message {% if dialogue.speaker == '영웅' %}player-message{% else %}demon-lord-message{% endif %}">
+            <strong>{{ dialogue.speaker }}:</strong> {{ dialogue.content }}
+        </div>
+    {% empty %}
+        <p>대화 기록이 없습니다.</p>
     {% endfor %}
-    </ul>
-    
-    <a href="{% url 'game:start_game' %}">재시작</a>
+</div>
+
 {% endblock %}
