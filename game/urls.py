@@ -17,6 +17,7 @@ urlpatterns = [
 
     # 새로운 API 엔드포인트 추가
     path('api/process-dialogue/<int:game_session_id>/', views.process_dialogue, name='process_dialogue'),
+    path('play_sheet/<int:game_session_id>/', views.play_game_sheet, name='play_game_sheet'),
 
     # 게임 히스토리 페이지 (선택적)
 ]
