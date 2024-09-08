@@ -8,9 +8,9 @@ from django.contrib.auth.decorators import login_required
 from django.contrib.auth.forms import UserCreationForm
 from django.contrib import messages
 from django.core.paginator import Paginator
-from django.http import HttpResponseForbidden
-from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie
-from django.views.decorators.http import require_POST, require_http_methods
+from django.http import HttpResponseForbidden, HttpResponse
+from django.views.decorators.csrf import csrf_protect, ensure_csrf_cookie, csrf_exempt
+from django.views.decorators.http import require_POST, require_http_methods, require_GET
 from django.http import HttpResponseBadRequest
 from .chatbot import generate_demon_lord_response, analyze_player_message
 from .models import Player, GameSession, Dialogue, GameState, StoryProgress, GameResult
@@ -22,25 +22,26 @@ from .game_logic import update_emotional_state, update_demon_lord_emotion, calcu
 import json
 import openai
 from django.conf import settings
-
+from django.views.decorators.csrf import ensure_csrf_cookie
 
 def home(request):
     return render(request, 'game/home.html')
 
-
+@csrf_exempt
 def register(request):
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
         if form.is_valid():
             form.save()
-            username = form.cleaned_data.get('username')
-            messages.success(request, f'Account created for {username}!')
-            return redirect('game:login')
-    else:
-        form = UserCreationForm()
-    return render(request, 'game/register.html', {'form': form})
+            return JsonResponse({'success': True, 'message': '회원가입이 성공적으로 완료되었습니다.'})
+        else:
+            errors = {}
+            for field, error_list in form.errors.items():
+                errors[field] = [str(error) for error in error_list]
+            return JsonResponse({'success': False, 'errors': errors}, status=400)
+    return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
 
-
+@ensure_csrf_cookie
 def logout_view(request):
     logout(request)
     return redirect('game:home')
@@ -252,14 +253,12 @@ def process_dialogue(request, game_session_id):
         return HttpResponseBadRequest("메시지 내용이 비어있습니다.")
 
     try:
-        # 대화 내용 분석
         dialogue_analysis = analyze_dialogue_content(player_message)
         Dialogue.objects.create(
             game_session=game_session,
             speaker='영웅',
             content=player_message
         )
-        # AI를 사용하여 마왕의 응답 생성
         demon_lord_response, demon_lord_analysis = generate_demon_lord_response(
             player_message,
             game_session.gamestate,
@@ -270,7 +269,6 @@ def process_dialogue(request, game_session_id):
             speaker='마왕',
             content=demon_lord_response
         )
-        # 게임 상태 업데이트
         updated_game_state = update_game_state(
             game_session,
             player_message,
@@ -278,10 +276,16 @@ def process_dialogue(request, game_session_id):
             dialogue_analysis
         )
 
-        # 응답 데이터 준비
         response_data = {
             'demon_lord_response': demon_lord_response,
-            'game_state': updated_game_state,
+            'game_state': {
+                'player_persuasion_level': updated_game_state['player_persuasion_level'],
+                'demon_lord_resistance': updated_game_state['demon_lord_resistance'],
+                'player_emotional_state': updated_game_state['player_emotional_state'],
+                'demon_lord_emotional_state': updated_game_state['demon_lord_emotional_state'],
+                'argument_strength': updated_game_state['argument_strength'],
+                'current_chapter': updated_game_state['current_chapter'],
+            },
             'dialogue_analysis': dialogue_analysis,
             'demon_lord_analysis': demon_lord_analysis,
         }
@@ -292,6 +296,7 @@ def process_dialogue(request, game_session_id):
                 'result': end_result['result'],
                 'message': end_result['description']
             }
+
         logger.info(f"대화가 처리되었습니다. 게임 세션: {game_session_id}")
         return JsonResponse(response_data)
 
@@ -299,159 +304,33 @@ def process_dialogue(request, game_session_id):
         logger.exception(f"대화 처리 중 오류 발생. 게임 세션 {game_session_id}: {str(e)}")
         return JsonResponse({'error': "대화 처리 중 예기치 못한 오류가 발생했습니다."}, status=500)
 
+@login_required
+@require_GET
+def api_get_game_state(request, game_session_id):
+    try:
+        game_session = GameSession.objects.select_related('gamestate', 'storyprogress').get(
+            id=game_session_id,
+            player__user=request.user
+        )
+        game_state = game_session.gamestate
+        story_progress = game_session.storyprogress
 
-# def process_dialogue(request, game_session_id):
-#     try:
-#         game_session = GameSession.objects.select_related('player', 'gamestate', 'storyprogress').get(
-#             id=game_session_id)
-#     except GameSession.DoesNotExist:
-#         logger.warning(f"게임 세션을 찾을 수 없습니다: {game_session_id}")
-#         return JsonResponse({"error": "게임 세션을 찾을 수 없습니다"}, status=404)
-#
-#     player_message = request.POST.get('message')
-#
-#     if not player_message:
-#         return HttpResponseBadRequest("메시지 내용이 비어있습니다.")
-#
-#     try:
-#         # 대화 내용 분석
-#         dialogue_analysis = analyze_dialogue_content(player_message)
-#
-#         # 플레이어 대화 저장
-#         Dialogue.objects.create(
-#             game_session=game_session,
-#             speaker='영웅',
-#             content=player_message
-#         )
-#
-#         # AI를 사용하여 마왕의 응답 생성
-#         demon_lord_response = generate_demon_lord_response(player_message, game_session.gamestate,
-#                                                            game_session.storyprogress)
-#
-#         # 마왕 대화 저장
-#         Dialogue.objects.create(
-#             game_session=game_session,
-#             speaker='마왕',
-#             content=demon_lord_response
-#         )
-#
-#         # 게임 상태 및 스토리 진행 업데이트 (대화 분석 결과 포함)
-#         update_game_state(game_session, player_message, demon_lord_response, dialogue_analysis)
-#         update_story_progress(game_session, dialogue_analysis)
-#
-#         # 게임 종료 조건 확인
-#         game_end_result = check_game_end(game_session)
-#         is_game_ended = bool(game_end_result)
-#         if is_game_ended:
-#             end_game(game_session, game_end_result)
-#
-#         # 응답 데이터 준비
-#         response_data = {
-#             'demon_lord_response': demon_lord_response,
-#             'game_state': {
-#                 'player_persuasion_level': game_session.player.persuasion_level,
-#                 'player_emotional_state': game_session.player_emotional_state,
-#                 'demon_lord_resistance': game_session.demon_lord_resistance,
-#                 'demon_lord_emotional_state': game_session.demon_lord_emotional_state,
-#                 'argument_strength': game_session.argument_strength,
-#             },
-#             'story_progress': {
-#                 'current_chapter': game_session.storyprogress.current_chapter,
-#                 'chapter_progress': game_session.storyprogress.chapter_progress,
-#             },
-#             'dialogue_analysis': dialogue_analysis,
-#             'is_game_ended': is_game_ended,
-#             'game_result': game_end_result if is_game_ended else None
-#         }
-#
-#         logger.info(f"대화가 처리되었습니다. 게임 세션: {game_session_id}")
-#         return JsonResponse(response_data)
-#
-#     except Exception as e:
-#         logger.exception(f"대화 처리 중 오류 발생. 게임 세션 {game_session_id}: {str(e)}")
-#         return JsonResponse({'error': "대화 처리 중 예기치 못한 오류가 발생했습니다."}, status=500)
+        return JsonResponse({
+            'player_persuasion_level': game_state.player_persuasion_level,
+            'demon_lord_resistance': game_state.demon_lord_resistance,
+            'player_emotional_state': game_state.player_emotional_state,
+            'demon_lord_emotional_state': game_state.demon_lord_emotional_state,
+            'argument_strength': game_state.argument_strength,
+            'current_chapter': story_progress.current_chapter,
+            'is_completed': game_session.is_completed,
+            'result': game_session.result if game_session.is_completed else None
+        })
+    except GameSession.DoesNotExist:
+        return JsonResponse({'error': '게임 세션을 찾을 수 없습니다.'}, status=404)
+    except Exception as e:
+        logger.error(f"게임 상태 조회 중 오류 발생: {str(e)}")
+        return JsonResponse({'error': '게임 상태 조회 중 오류가 발생했습니다.'}, status=500)
 
-
-# update_game_state와 update_story_progress 함수도 dialogue_analysis 매개변수를 받도록 수정해야 합니다.
-# @transaction.atomic
-# def update_story_progress(story_progress, game_state, player_message, dialogue_analysis):
-#     MAX_TURNS = 10
-#     current_turn = story_progress.current_chapter
-#
-#     # 플레이어의 설득력에 따른 진행도 증가
-#     progress_increase = game_state.player_persuasion_level
-#     story_progress.progress += progress_increase
-#
-#     # 진행도가 100 이상이면 다음 챕터로 넘어감
-#     if story_progress.progress >= 100:
-#         story_progress.current_chapter += 1
-#         story_progress.progress = 0
-#
-#     # 플롯 포인트 추가 및 관리
-#     new_plot_point = None
-#     if "평화" in dialogue_analysis['used_keywords'] or "협력" in dialogue_analysis['used_keywords']:
-#         new_plot_point = {
-#             "type": "peace_proposal",
-#             "chapter": story_progress.current_chapter,
-#             "description": "플레이어가 평화적 해결책 제안",
-#             "impact": {
-#                 "player_persuasion": game_state.player_persuasion_level,
-#                 "demon_resistance": game_state.demon_lord_resistance
-#             }
-#         }
-#     elif dialogue_analysis['score'] > 50:  # 높은 대화 점수
-#         new_plot_point = {
-#             "type": "successful_argument",
-#             "chapter": story_progress.current_chapter,
-#             "description": "플레이어가 강력한 논점 제시",
-#             "impact": {
-#                 "persuasion_increase": progress_increase
-#             }
-#         }
-#     elif game_state.demon_lord_resistance < 50 and game_state.demon_lord_resistance >= 40:
-#         new_plot_point = {
-#             "type": "demon_lord_wavering",
-#             "chapter": story_progress.current_chapter,
-#             "description": "마왕의 결심이 흔들리기 시작함",
-#             "impact": {
-#                 "resistance_decrease": 50 - game_state.demon_lord_resistance
-#             }
-#         }
-#
-#     if new_plot_point:
-#         if not isinstance(story_progress.plot_points, list):
-#             story_progress.plot_points = []
-#         story_progress.plot_points.append(new_plot_point)
-#
-#     # 게임 종료 조건 확인
-#     is_completed = current_turn >= MAX_TURNS
-#     result = None
-#
-#     if is_completed:
-#         if game_state.player_persuasion_level > game_state.demon_lord_resistance:
-#             result = "victory"
-#         else:
-#             result = "defeat"
-#
-#     # 스토리 분기 처리
-#     if story_progress.current_chapter == 3:
-#         if "동맹" in dialogue_analysis['used_keywords']:
-#             story_progress.story_path = "alliance"
-#         elif "대결" in dialogue_analysis['used_keywords']:
-#             story_progress.story_path = "confrontation"
-#         else:
-#             story_progress.story_path = "neutral"
-#
-#     story_progress.save()
-#
-#     return {
-#         "current_chapter": story_progress.current_chapter,
-#         "progress": story_progress.progress,
-#         "plot_points": story_progress.plot_points,
-#         "story_path": getattr(story_progress, 'story_path', None),
-#         "is_completed": is_completed,
-#         "result": result
-#     }
 def update_persuasion_and_resistance(game_state, player_analysis, dialogue_analysis, calculate_resistance_decrease):
     # 대화 분석 결과를 바탕으로 가중치 계산
     dialogue_score = dialogue_analysis['score']
@@ -592,35 +471,6 @@ def update_argument_strength(game_state, player_analysis, dialogue_analysis):
         }
 
 
-# def check_game_completion(game_session: GameSession, game_state: GameState) -> Tuple[bool, Dict]:
-#     is_completed = False
-#     result = {}
-#
-#     try:
-#         if game_state.player_persuasion_level >= 100:
-#             is_completed = True
-#             result = {'outcome': '설득 승리', 'description': '플레이어가 마왕을 완전히 설득했습니다!'}
-#         elif game_state.demon_lord_resistance <= 0:
-#             is_completed = True
-#             result = {'outcome': '저항 무력화 승리', 'description': '마왕의 저항이 완전히 무너졌습니다!'}
-#         elif game_state.player_persuasion_level >= 90 and game_session.storyprogress.current_chapter >= 5:
-#             is_completed = True
-#             result = {'outcome': '완벽한 엔딩', 'description': '플레이어가 마왕과의 대화에서 탁월한 성과를 거두었습니다!'}
-#         elif (timezone.now() - game_session.start_time).total_seconds() > 3600:  # 1시간 제한
-#             is_completed = True
-#             result = {'outcome': '시간 초과', 'description': '제한 시간 내에 마왕을 설득하지 못했습니다.'}
-#         elif game_session.dialogues.count() > 50:  # 대화 턴 수 제한
-#             is_completed = True
-#             result = {'outcome': '대화 턴 초과', 'description': '너무 많은 대화를 나누어 마왕이 지쳤습니다.'}
-#
-#         if is_completed:
-#             end_game(game_session, result['outcome'])
-#
-#         return is_completed, result
-#
-#     except Exception as e:
-#         logger.error(f"게임 종료 조건 확인 중 오류 발생: {str(e)}")
-#         return False, {'outcome': '오류', 'description': '게임 종료 조건 확인 중 오류가 발생했습니다.'}
 
 def end_game(game_session: GameSession, result: str) -> None:
     try:
@@ -726,13 +576,15 @@ def game_result(request, game_session_id):
         'game_duration': game_result.duration,
     }
     return render(request, 'game/result.html', context)
-def play_game_sheet(request, game_session_id):
-    game_session = get_object_or_404(GameSession, id=game_session_id)
 
-    context = {
-        'game_session': game_session,
-        'game_state': game_session.gamestate,
-        'story_progress': game_session.storyprogress,
-    }
 
-    return render(request, 'game/gamesheet.html', context)
+@ensure_csrf_cookie
+def get_csrf_token(request):
+    return JsonResponse({'success': 'CSRF cookie set'})
+@ensure_csrf_cookie
+def set_csrf_token(request):
+    return HttpResponse("CSRF cookie set")
+
+@ensure_csrf_cookie
+def csrf(request):
+    return HttpResponse("CSRF cookie set")

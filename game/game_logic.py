@@ -68,7 +68,7 @@ def update_game_state(game_session, player_message, demon_lord_response, dialogu
     print('game_state.player_persuasion_level', game_state.player_persuasion_level)
 
     # 마왕의 저항력 업데이트
-    resistance_decrease = max(persuasion_increase - 5, 0)  # 설득력 증가에 따라 저항력 감소
+    resistance_decrease = persuasion_increase # 설득력 증가에 따라 저항력 감소
     game_state.demon_lord_resistance = max(0, game_state.demon_lord_resistance - resistance_decrease)
 
     # 감정 상태 업데이트
