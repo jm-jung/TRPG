@@ -24,10 +24,11 @@ import openai
 from django.conf import settings
 from django.views.decorators.csrf import ensure_csrf_cookie
 
+
 def home(request):
     return render(request, 'game/home.html')
 
-@csrf_exempt
+
 def register(request):
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
@@ -41,7 +42,7 @@ def register(request):
             return JsonResponse({'success': False, 'errors': errors}, status=400)
     return JsonResponse({'success': False, 'error': 'Invalid request method'}, status=405)
 
-@ensure_csrf_cookie
+
 def logout_view(request):
     logout(request)
     return redirect('game:home')
@@ -50,6 +51,7 @@ def logout_view(request):
 logger = logging.getLogger(__name__)
 
 
+@csrf_exempt
 @login_required
 @require_http_methods(["POST"])
 def start_game(request):
@@ -304,6 +306,7 @@ def process_dialogue(request, game_session_id):
         logger.exception(f"대화 처리 중 오류 발생. 게임 세션 {game_session_id}: {str(e)}")
         return JsonResponse({'error': "대화 처리 중 예기치 못한 오류가 발생했습니다."}, status=500)
 
+
 @login_required
 @require_GET
 def api_get_game_state(request, game_session_id):
@@ -330,6 +333,7 @@ def api_get_game_state(request, game_session_id):
     except Exception as e:
         logger.error(f"게임 상태 조회 중 오류 발생: {str(e)}")
         return JsonResponse({'error': '게임 상태 조회 중 오류가 발생했습니다.'}, status=500)
+
 
 def update_persuasion_and_resistance(game_state, player_analysis, dialogue_analysis, calculate_resistance_decrease):
     # 대화 분석 결과를 바탕으로 가중치 계산
@@ -471,7 +475,6 @@ def update_argument_strength(game_state, player_analysis, dialogue_analysis):
         }
 
 
-
 def end_game(game_session: GameSession, result: str) -> None:
     try:
         game_session.is_active = False
@@ -496,6 +499,7 @@ def end_game(game_session: GameSession, result: str) -> None:
 
     except Exception as e:
         logger.error(f"게임 종료 처리 중 오류 발생. 세션 ID: {game_session.id}, 오류: {str(e)}")
+
 
 def check_game_end(game_session) -> Tuple[bool, Dict]:
     try:
@@ -581,9 +585,12 @@ def game_result(request, game_session_id):
 @ensure_csrf_cookie
 def get_csrf_token(request):
     return JsonResponse({'success': 'CSRF cookie set'})
+
+
 @ensure_csrf_cookie
 def set_csrf_token(request):
     return HttpResponse("CSRF cookie set")
+
 
 @ensure_csrf_cookie
 def csrf(request):

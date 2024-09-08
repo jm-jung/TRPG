@@ -12,7 +12,8 @@ app_name = 'game'  # URL 네임스페이스 추가
 urlpatterns = [
     path('', views.home, name='home'),
     path('register/', views.register, name='register'),
-    path('login/', csrf_exempt(auth_views.LoginView.as_view(template_name='game/login.html')), name='login'),
+    path('login/', auth_views.LoginView.as_view(template_name='game/login.html'), name='login'),
+
     path('logout/', views.logout_view, name='logout'),
     path('start/', views.start_game, name='start_game'),
     path('play/<int:game_session_id>/', views.play_game, name='play_game'),

@@ -49,7 +49,7 @@ CSRF_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SAMESITE = 'None'
 SESSION_COOKIE_SECURE = True
 CSRF_COOKIE_HTTPONLY = False
-CSRF_USE_SESSIONS = True
+CSRF_USE_SESSIONS = False
 CSRF_COOKIE_SECURE = False
 
 # 기존 MIDDLEWARE 리스트에서 순서 변경
@@ -89,7 +89,11 @@ INSTALLED_APPS = [
     'game.apps.GameConfig',
     'corsheaders',
 ]
-
+REST_FRAMEWORK = {
+    'DEFAULT_PARSER_CLASSES': [
+        'rest_framework.parsers.JSONParser',
+    ]
+}
 MIDDLEWARE = [
     'corsheaders.middleware.CorsMiddleware',  # 반드시 CSRF 미들웨어 위에 추가
     'django.middleware.security.SecurityMiddleware',
