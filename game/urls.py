@@ -9,7 +9,6 @@ from django.contrib.auth import views as auth_views
 from .views import csrf
 
 app_name = 'game'  # URL 네임스페이스 추가
-
 urlpatterns = [
     path('', views.home, name='home'),
     path('register/', views.register, name='register'),
